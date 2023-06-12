@@ -11,7 +11,7 @@ use plonky2::{
 
 pub trait RecursiveTarget {
     type SIZE;
-    type VALUE;
+    type VALUE<F>;
 
     // SelfにOptionが含まれていたら、それは無視する
     fn to_vec(&self) -> Vec<Target>;
@@ -21,11 +21,11 @@ pub trait RecursiveTarget {
     fn from_vec<F: RichField + Extendable<D>, const D: usize>(
         builder: &mut CircuitBuilder<F, D>,
         input: &[Target],
-        size: Self::SIZE,
+        size: &Self::SIZE,
     ) -> Self;
 
     // SelfにOptionが含まれるていたら、Noneの場合はwitnessを設定せず、Some(T)の場合はwitnessを設定する
-    fn set_witness<F: Field>(&self, pw: &mut PartialWitness<F>, value: &Self::VALUE);
+    fn set_witness<F: Field>(&self, pw: &mut PartialWitness<F>, value: &Self::VALUE<F>);
 
     fn register_public_inputs<F: RichField + Extendable<D>, const D: usize>(
         &self,
@@ -35,19 +35,39 @@ pub trait RecursiveTarget {
     }
 }
 
-pub trait Statement {
-    type T: RecursiveTarget;
-
+pub trait Provable: RecursiveTarget {
     fn build_circuit<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>(
-    ) -> (CircuitData<F, C, D>, Self::T);
+    ) -> (CircuitData<F, C, D>, Self);
 
     fn generate_proof<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>(
+        &self,
         data: &CircuitData<F, C, D>,
-        target: &Self::T,
-        value: &<Self::T as RecursiveTarget>::VALUE,
+        value: &<Self as RecursiveTarget>::VALUE<F>,
     ) -> Result<ProofWithPublicInputs<F, C, D>> {
         let mut pw = PartialWitness::<F>::new();
-        <Self::T as RecursiveTarget>::set_witness(target, &mut pw, value);
+        <Self as RecursiveTarget>::set_witness(&self, &mut pw, value);
         data.prove(pw)
+    }
+
+    fn decode_statement_target<
+        F: RichField + Extendable<D>,
+        C: GenericConfig<D, F = F>,
+        const D: usize,
+    >(
+        builder: &mut CircuitBuilder<F, D>,
+        public_inputs: &[Target],
+        num_targets_per_statement: usize,
+        statement_size: &<Self as RecursiveTarget>::SIZE,
+    ) -> Vec<Self>
+    where
+        Self: Sized,
+    {
+        assert!(public_inputs.len() % num_targets_per_statement == 0);
+        public_inputs
+            .chunks(num_targets_per_statement)
+            .map(|statement_vec| {
+                <Self as RecursiveTarget>::from_vec(builder, statement_vec, statement_size)
+            })
+            .collect()
     }
 }
