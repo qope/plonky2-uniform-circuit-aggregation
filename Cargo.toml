@@ -1,5 +1,5 @@
 [package]
-name = "plonky2-traits"
+name = "plonky2-uniform-circuit-aggregation"
 version = "0.1.0"
 edition = "2021"
 
