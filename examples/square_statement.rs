@@ -1,3 +1,5 @@
+use std::time::Instant;
+
 use itertools::Itertools;
 use plonky2::{
     field::{extension::Extendable, goldilocks_field::GoldilocksField, ops::Square, types::Field},
@@ -15,6 +17,10 @@ use plonky2::{
 use plonky2_uniform_circuit_aggregation::{
     add_recursive_constraint, build_circuits, generate_aggregation_proofs,
     traits::{Provable, RecursiveTarget},
+};
+use rayon::{
+    prelude::{IntoParallelRefIterator, ParallelIterator},
+    ThreadPoolBuilder,
 };
 
 pub struct SquareTarget {
@@ -65,14 +71,30 @@ impl Provable for SquareTarget {
     }
 }
 
+fn constant_strategy(n: usize, arity: usize) -> Vec<usize> {
+    let mut i = 1usize;
+    while arity.pow(i as u32) < n {
+        i += 1;
+    }
+    vec![arity; i]
+}
+
 fn main() {
     type F = GoldilocksField;
     type C = PoseidonGoldilocksConfig;
     const D: usize = 2;
 
-    let n = 10;
+    let n = 100;
     let num_targets_per_statement = 2;
-    let alignment = vec![2, 3, 2];
+    let alignment = constant_strategy(n, 10);
+    dbg!(alignment.clone());
+
+    // set number of threads
+    let num_threads = 8;
+    ThreadPoolBuilder::new()
+        .num_threads(num_threads)
+        .build_global()
+        .unwrap();
 
     // setup
     let config = CircuitConfig::standard_recursion_config();
@@ -89,12 +111,14 @@ fn main() {
 
     // generate base proofs
     let base_proofs = witness
-        .iter()
+        .par_iter()
         .map(|w| base_target.generate_proof(&base_data, w).unwrap())
         .collect::<Vec<_>>();
 
     // generate aggregation proof
+    let now = Instant::now();
     let final_proof = generate_aggregation_proofs(&base_proofs, &setup);
+    println!("Aggregation time: {:?}", now.elapsed());
 
     // verify
     let final_circuit = setup.circuits_data.last().unwrap();

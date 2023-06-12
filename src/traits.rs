@@ -13,18 +13,14 @@ pub trait RecursiveTarget {
     type SIZE;
     type VALUE<F>;
 
-    // SelfにOptionが含まれていたら、それは無視する
     fn to_vec(&self) -> Vec<Target>;
 
-    // SelfにOptionが含まれるていたら、NoneをいれてSelfを作る
-    // sizeはSelfのサイズを指定するためのoptionalな入力
     fn from_vec<F: RichField + Extendable<D>, const D: usize>(
         builder: &mut CircuitBuilder<F, D>,
         input: &[Target],
         size: &Self::SIZE,
     ) -> Self;
 
-    // SelfにOptionが含まれるていたら、Noneの場合はwitnessを設定せず、Some(T)の場合はwitnessを設定する
     fn set_witness<F: Field>(&self, pw: &mut PartialWitness<F>, value: &Self::VALUE<F>);
 
     fn register_public_inputs<F: RichField + Extendable<D>, const D: usize>(

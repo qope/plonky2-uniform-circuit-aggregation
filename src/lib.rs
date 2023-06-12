@@ -1,3 +1,4 @@
+use debug_rs::debug;
 use itertools::Itertools;
 use plonky2::{
     field::extension::Extendable,
@@ -49,6 +50,7 @@ where
         .zip(setup.circuits_data.iter())
         .zip(setup.proof_t_vecs.iter())
         .for_each(|((&arity, data), proof_targets)| {
+            debug!(arity);
             let agg_proofs: Vec<_> = proofs
                 .par_chunks(arity)
                 .map(|proof_chunk| {
