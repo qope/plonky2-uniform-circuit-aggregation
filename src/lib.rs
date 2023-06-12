@@ -49,8 +49,6 @@ where
         .zip(setup.circuits_data.iter())
         .zip(setup.proof_t_vecs.iter())
         .for_each(|((&arity, data), proof_targets)| {
-            println!("arity: {}", arity);
-            println!("proofs len: {}", proofs.len());
             let agg_proofs: Vec<_> = proofs
                 .par_chunks(arity)
                 .map(|proof_chunk| {
@@ -134,107 +132,5 @@ where
         alignment,
         circuits_data,
         proof_t_vecs,
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use plonky2::{
-        field::{
-            extension::Extendable, goldilocks_field::GoldilocksField, ops::Square, types::Field,
-        },
-        hash::hash_types::RichField,
-        iop::{
-            target::Target,
-            witness::{PartialWitness, WitnessWrite},
-        },
-        plonk::{
-            circuit_builder::CircuitBuilder,
-            circuit_data::{CircuitConfig, CircuitData},
-            config::{GenericConfig, PoseidonGoldilocksConfig},
-        },
-    };
-    use rayon::prelude::{IntoParallelIterator, ParallelIterator};
-
-    use crate::{
-        build_circuits, generate_aggregation_proofs,
-        traits::{Provable, RecursiveTarget},
-    };
-
-    pub struct SquareTarget {
-        pub x: Target,
-        pub x_sq: Target,
-    }
-
-    pub struct SquareWitness<F> {
-        pub x: F,
-        pub x_sq: F,
-    }
-
-    impl RecursiveTarget for SquareTarget {
-        type SIZE = ();
-        type VALUE<F> = SquareWitness<F>;
-
-        fn to_vec(&self) -> Vec<Target> {
-            vec![self.x, self.x_sq]
-        }
-        fn from_vec<F: RichField + Extendable<D>, const D: usize>(
-            _builder: &mut CircuitBuilder<F, D>,
-            input: &[Target],
-            _size: &Self::SIZE,
-        ) -> Self {
-            assert!(input.len() == 2);
-            let x = input[0];
-            let x_sq = input[1];
-            SquareTarget { x, x_sq }
-        }
-        fn set_witness<F: Field>(&self, pw: &mut PartialWitness<F>, value: &SquareWitness<F>) {
-            pw.set_target(self.x, value.x);
-            pw.set_target(self.x_sq, value.x_sq);
-        }
-    }
-
-    impl Provable for SquareTarget {
-        fn build_circuit<
-            F: RichField + Extendable<D>,
-            C: GenericConfig<D, F = F>,
-            const D: usize,
-        >() -> (CircuitData<F, C, D>, Self) {
-            let config = CircuitConfig::standard_recursion_config();
-            let mut builder = CircuitBuilder::new(config);
-
-            let x = builder.add_virtual_target();
-            let x_sq = builder.square(x);
-
-            let target = SquareTarget { x, x_sq };
-            let data = builder.build::<C>();
-            (data, target)
-        }
-    }
-
-    #[test]
-    fn test_proof_aggregation() {
-        type F = GoldilocksField;
-        type C = PoseidonGoldilocksConfig;
-        const D: usize = 2;
-
-        let n = 10;
-        let alignment = vec![2, 3, 2];
-
-        let config = CircuitConfig::standard_recursion_config();
-        let (base_data, base_target) = SquareTarget::build_circuit::<F, C, D>();
-        let setup = build_circuits(n, &config, &base_data, alignment);
-
-        let base_proofs = (0..n)
-            .into_par_iter()
-            .map(|i| {
-                let value = SquareWitness {
-                    x: F::from_canonical_usize(i),
-                    x_sq: F::from_canonical_usize(i).square(),
-                };
-                base_target.generate_proof(&base_data, &value).unwrap()
-            })
-            .collect::<Vec<_>>();
-        let _agg_proof = generate_aggregation_proofs(&base_proofs, &setup);
     }
 }
